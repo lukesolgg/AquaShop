@@ -5,23 +5,40 @@ namespace AquariumShop
 {
     public class TankView : MonoBehaviour
     {
+        [SerializeField] string tankId;
         [SerializeField] Transform waterVolume;
 
         readonly List<GameObject> _spawned = new List<GameObject>();
         int _lastCount = -1;
+
+        public void Configure(string id, Transform water)
+        {
+            tankId = id;
+            if (water != null) waterVolume = water;
+        }
 
         void Update()
         {
             var shop = GameManager.Instance?.shop;
             if (shop == null) return;
 
-            int count = shop.tank.AliveCount;
+            var tank = Resolve(shop);
+            int count = tank != null ? tank.AliveCount : 0;
             if (count == _lastCount) return;
             _lastCount = count;
-            Rebuild(shop.tank);
+            Rebuild(tank);
         }
 
-        public void Rebuild(TankState tank)
+        TankInstance Resolve(ShopState shop)
+        {
+            if (!string.IsNullOrEmpty(tankId))
+                return shop.GetTank(tankId);
+            var anchor = GetComponent<TankAnchor>();
+            if (anchor != null) return shop.GetTank(anchor.id);
+            return shop.PrimaryTank();
+        }
+
+        public void Rebuild(TankInstance tank)
         {
             foreach (var go in _spawned)
                 if (go != null) Destroy(go);
@@ -33,20 +50,14 @@ namespace AquariumShop
             foreach (var fish in tank.fish)
             {
                 if (fish == null || !fish.IsAlive || fish.species == null) continue;
-
-                // Use the species prefab if assigned, otherwise skip
                 GameObject prefabToSpawn = fish.species.fishPrefab;
                 if (prefabToSpawn == null) continue;
 
                 Transform parent = waterVolume != null ? waterVolume : transform;
                 var go = Instantiate(prefabToSpawn, parent);
-                
                 go.name = fish.species.id;
                 go.transform.localPosition = Slot(i);
-                
-                // Adjust scale if needed for your specific clownfish model size
                 go.transform.localScale = Vector3.one * 0.15f;
-
                 _spawned.Add(go);
                 i++;
             }

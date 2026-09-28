@@ -13,11 +13,24 @@ namespace AquariumShop
     }
 
     [Serializable]
+    public class TankSave
+    {
+        public string id;
+        public string displayName;
+        public int segment;
+        public int capacity;
+        public List<FishSave> fish = new List<FishSave>();
+    }
+
+    [Serializable]
     public class OrderSave
     {
         public string id;
         public string speciesId;
+        public int qty;
+        public int qtyFilled;
         public float payout;
+        public float penalty;
         public float hoursRemaining;
         public int status;
     }
@@ -30,9 +43,8 @@ namespace AquariumShop
         public float gameHours;
         public int hoursUntilNextOrder;
         public int orderSerial;
-        public bool won;
-        public bool lost;
-        public List<FishSave> fish = new List<FishSave>();
+        public int level = 1;
+        public List<TankSave> tanks = new List<TankSave>();
         public List<OrderSave> orders = new List<OrderSave>();
     }
 

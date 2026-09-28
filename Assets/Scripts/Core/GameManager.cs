@@ -10,18 +10,21 @@ namespace AquariumShop
         [Header("Refs")]
         public HUD hud;
         public Behaviour playerController;
+        public PriceList priceList;
+        public TankPanel tankPanel;
+        public CounterTablet counterTablet;
 
         [Header("Catalogue")]
         public FishSpecies[] catalogue;
 
         [Header("Orders")]
-        public int maxOpenOrders = 3;
+        public int maxOpenOrders = 5;
         public int minHoursBetweenOrders = 2;
         public int maxHoursBetweenOrders = 4;
-        public int orderTimeoutHours = 8;
-
-        [Header("Goals")]
-        public float winMoney = 1000f;
+        public int minOrderQty = 1;
+        public int maxOrderQty = 4;
+        public int minOrderHours = 3;
+        public int maxOrderHours = 8;
 
         [Header("Run state")]
         public ShopState shop = new ShopState();
@@ -45,82 +48,149 @@ namespace AquariumShop
         }
 
         void Start()
-{
-    // Updated FindAnyObjectByType to clear the CS0618 deprecation warning
-    if (hud == null) hud = FindAnyObjectByType<HUD>(); 
-    if (GetComponent<TimeKeeper>() == null)
-        gameObject.AddComponent<TimeKeeper>();
+        {
+            if (hud == null) hud = FindAnyObjectByType<HUD>();
+            if (GetComponent<TimeKeeper>() == null)
+                gameObject.AddComponent<TimeKeeper>();
 
-    // Always clear run-ending flags when a fresh scene boots up
-    Won = false;
-    Lost = false;
+            Won = false;
+            Lost = false;
 
-    if (!TryLoad())
-        _hoursUntilNextOrder = 1;
+            RegisterAnchors();
+            if (!TryLoad())
+                _hoursUntilNextOrder = 1;
+            RegisterAnchors();
 
-    RefreshUI();
-    SetMenuOpen(false);
-    CheckEnd();
-}
+            RefreshUI();
+            SetMenuOpen(false);
+        }
+
+        public void RegisterAnchors()
+        {
+            foreach (var anchor in FindObjectsByType<TankAnchor>(FindObjectsSortMode.None))
+                shop.EnsureTank(anchor);
+        }
 
         void OnApplicationQuit()
         {
-            // Only save on quit if the game isn't already over
             if (!GameOver) Save();
         }
 
         public void OpenInteract(Interactable.Kind kind)
-        {
-            if (GameOver) return;
-            hud?.ShowMenu(kind == Interactable.Kind.Tank ? "Tank" : "Wholesaler");
-            SetMenuOpen(true);
-        }
+{
+    if (GameOver) return;
+    if (kind == Interactable.Kind.Counter && counterTablet != null)
+        counterTablet.Open();
+    else if (kind == Interactable.Kind.Tank && tankPanel != null)
+        tankPanel.Open();
+    else
+        hud?.ShowMenu(kind == Interactable.Kind.Tank ? "Tank" : "Wholesaler");
+    SetMenuOpen(true);
+}
 
         public void ToggleManagementMenu()
-        {
-            if (GameOver) return;
-            if (MenuOpen) { CloseMenu(); return; }
-            hud?.ShowMenu("Management");
-            SetMenuOpen(true);
-        }
+{
+    if (GameOver) return;
+    if (MenuOpen) { CloseMenu(); return; }
+    if (tankPanel != null)
+        tankPanel.Open();
+    else
+        hud?.ShowMenu("Management");
+    SetMenuOpen(true);
+}
 
         public void CloseMenu()
-        {
-            hud?.HideMenu();
-            SetMenuOpen(false);
-            if (!GameOver) Save();
-        }
+{
+    hud?.HideMenu();
+    tankPanel?.Close();
+    counterTablet?.Close();
+    SetMenuOpen(false);
+    if (!GameOver) Save();
+}
 
         public void BuyFish(FishSpecies species)
         {
             if (GameOver) return;
-            if (shop.TryBuyFish(species, out var error))
+            var tank = FirstAccepting(species);
+            if (tank == null)
+            {
+                Debug.Log("No tank can take that species.");
+                AfterChange();
+                return;
+            }
+            if (shop.TryBuyFish(species, tank.id, priceList, out var error))
+                Debug.Log($"Bought {species.displayName} into {tank.displayName}.");
+            else
+                Debug.Log(error);
+            AfterChange();
+        }
+
+        public void BuyFishInto(FishSpecies species, string tankId)
+        {
+            if (GameOver) return;
+            if (shop.TryBuyFish(species, tankId, priceList, out var error))
                 Debug.Log($"Bought {species.displayName}.");
             else
                 Debug.Log(error);
             AfterChange();
         }
 
-        public void BuyOneFood()
+        public void BuyFood(int units)
         {
             if (GameOver) return;
-            if (!shop.TryBuyFood(1, out var error)) Debug.Log(error);
+            if (!shop.TryBuyFood(units, priceList, out var error)) Debug.Log(error);
             AfterChange();
         }
+
+        public void BuyOneFood() => BuyFood(1);
 
         public void FeedAll()
         {
             if (GameOver) return;
-            if (!shop.TryFeedAll(out var error)) Debug.Log(error);
+            foreach (var tank in shop.tanks)
+            {
+                if (tank == null || tank.IsEmpty) continue;
+                if (!shop.TryFeedTank(tank.id, out var error))
+                {
+                    Debug.Log(error);
+                    break;
+                }
+            }
+            AfterChange();
+        }
+
+        public void FeedTank(string tankId)
+        {
+            if (GameOver) return;
+            if (!shop.TryFeedTank(tankId, out var error)) Debug.Log(error);
             AfterChange();
         }
 
         public void FulfillOrder(int index)
         {
             if (GameOver) return;
-            var order = shop.GetOpenOrder(index);
-            if (shop.TryFulfill(index, out var error))
-                Debug.Log($"Sold {order.wanted.displayName} for £{order.payout:0}.");
+            if (shop.TryFulfill(index, false, out var error))
+                Debug.Log("Order filled.");
+            else
+                Debug.Log(error);
+            AfterChange();
+        }
+
+        public void PartialFillOrder(int index)
+        {
+            if (GameOver) return;
+            if (shop.TryFulfill(index, true, out var error))
+                Debug.Log("Partial fill.");
+            else
+                Debug.Log(error);
+            AfterChange();
+        }
+
+        public void RefuseOrder(int index)
+        {
+            if (GameOver) return;
+            if (shop.TryRefuse(index, out var error))
+                Debug.Log("Order refused.");
             else
                 Debug.Log(error);
             AfterChange();
@@ -136,9 +206,17 @@ namespace AquariumShop
 
         void AfterChange()
         {
-            CheckEnd();
             RefreshUI();
             if (!GameOver) Save();
+            tankPanel?.Rebuild();
+            counterTablet?.Rebuild();
+        }
+
+        TankInstance FirstAccepting(FishSpecies species)
+        {
+            foreach (var t in shop.tanks)
+                if (t != null && t.Accepts(species)) return t;
+            return null;
         }
 
         void TickOrderSpawn()
@@ -151,53 +229,32 @@ namespace AquariumShop
 
         void TrySpawnOrder()
         {
-            if (catalogue == null || catalogue.Length == 0) return;
             if (shop.OpenOrderCount >= maxOpenOrders) return;
-            var species = catalogue[Random.Range(0, catalogue.Length)];
+            FishSpecies species = priceList != null ? priceList.PickWeighted() : null;
+            if (species == null && catalogue != null && catalogue.Length > 0)
+                species = catalogue[Random.Range(0, catalogue.Length)];
             if (species == null) return;
+
+            int qty = Random.Range(minOrderQty, maxOrderQty + 1);
+            float each = priceList != null ? priceList.Retail(species) : species.salePrice;
+            int hours = Random.Range(minOrderHours, maxOrderHours + 1);
+
             _orderSerial++;
             shop.orders.Add(new Order
             {
                 id = $"ord_{_orderSerial}",
                 wanted = species,
-                qty = 1,
-                payout = species.salePrice,
-                hoursRemaining = orderTimeoutHours,
+                qty = qty,
+                qtyFilled = 0,
+                payout = each * qty,
+                penalty = each * qty * 0.3f,
+                hoursRemaining = hours,
                 status = OrderStatus.Open
             });
         }
 
-        public void CheckEnd()
-        {
-            if (Won || Lost) return;
-
-            if (shop.money >= winMoney)
-            {
-                Won = true;
-                EndGame(true);
-                return;
-            }
-            if (shop.money <= 0f && shop.tank.AliveCount == 0)
-            {
-                Lost = true;
-                EndGame(false);
-            }
-        }
-
-        void EndGame(bool win)
-        {
-            TimeKeeper.Instance?.Pause();
-            hud?.ShowEnd(win
-                ? $"You win!\nFinal Balance: £{shop.money:0}"
-                : "You went bust\nNo money, empty tank.");
-
-            // Clear the save on game over so restarting starts completely fresh
-            SaveSystem.Delete();
-        }
-
         public void Restart()
         {
-            // Wipe save and unpause timescale before loading
             SaveSystem.Delete();
             Time.timeScale = 1f;
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
@@ -212,14 +269,27 @@ namespace AquariumShop
                 gameHours = TimeKeeper.Instance != null ? TimeKeeper.Instance.GameHours : 0f,
                 hoursUntilNextOrder = _hoursUntilNextOrder,
                 orderSerial = _orderSerial,
-                won = Won,
-                lost = Lost
+                level = shop.level
             };
-            foreach (var f in shop.tank.fish)
+
+            foreach (var tank in shop.tanks)
             {
-                if (f?.species == null) continue;
-                data.fish.Add(new FishSave { speciesId = f.species.id, hunger = f.hunger });
+                if (tank == null) continue;
+                var ts = new TankSave
+                {
+                    id = tank.id,
+                    displayName = tank.displayName,
+                    segment = (int)tank.segment,
+                    capacity = tank.capacity
+                };
+                foreach (var f in tank.fish)
+                {
+                    if (f?.species == null) continue;
+                    ts.fish.Add(new FishSave { speciesId = f.species.id, hunger = f.hunger });
+                }
+                data.tanks.Add(ts);
             }
+
             foreach (var o in shop.orders)
             {
                 if (o?.wanted == null) continue;
@@ -227,7 +297,10 @@ namespace AquariumShop
                 {
                     id = o.id,
                     speciesId = o.wanted.id,
+                    qty = o.qty,
+                    qtyFilled = o.qtyFilled,
                     payout = o.payout,
+                    penalty = o.penalty,
                     hoursRemaining = o.hoursRemaining,
                     status = (int)o.status
                 });
@@ -242,7 +315,7 @@ namespace AquariumShop
 
             shop.money = data.money;
             shop.foodUnits = data.foodUnits;
-            shop.tank.fish.Clear();
+            shop.level = data.level <= 0 ? 1 : data.level;
             shop.orders.Clear();
             _hoursUntilNextOrder = Mathf.Max(1, data.hoursUntilNextOrder);
             _orderSerial = data.orderSerial;
@@ -250,12 +323,34 @@ namespace AquariumShop
             if (TimeKeeper.Instance != null)
                 TimeKeeper.Instance.SetHours(data.gameHours);
 
-            foreach (var f in data.fish)
+            if (data.tanks != null)
             {
-                var species = FindSpecies(f.speciesId);
-                if (species == null) continue;
-                shop.tank.fish.Add(new FishInstance(species) { hunger = f.hunger });
+                foreach (var ts in data.tanks)
+                {
+                    if (ts == null || string.IsNullOrEmpty(ts.id)) continue;
+                    var tank = shop.GetTank(ts.id);
+                    if (tank == null)
+                    {
+                        tank = new TankInstance
+                        {
+                            id = ts.id,
+                            displayName = ts.displayName,
+                            segment = (TankSegment)ts.segment,
+                            capacity = ts.capacity > 0 ? ts.capacity : 6
+                        };
+                        shop.tanks.Add(tank);
+                    }
+                    tank.fish.Clear();
+                    if (ts.fish == null) continue;
+                    foreach (var f in ts.fish)
+                    {
+                        var species = FindSpecies(f.speciesId);
+                        if (species == null) continue;
+                        tank.fish.Add(new FishInstance(species) { hunger = f.hunger });
+                    }
+                }
             }
+
             foreach (var o in data.orders)
             {
                 var species = FindSpecies(o.speciesId);
@@ -264,8 +359,10 @@ namespace AquariumShop
                 {
                     id = o.id,
                     wanted = species,
-                    qty = 1,
+                    qty = o.qty <= 0 ? 1 : o.qty,
+                    qtyFilled = o.qtyFilled,
                     payout = o.payout,
+                    penalty = o.penalty,
                     hoursRemaining = o.hoursRemaining,
                     status = (OrderStatus)o.status
                 });
@@ -295,26 +392,18 @@ namespace AquariumShop
         string BuildStatusText()
         {
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"Money £{shop.money:0}  /  £{winMoney:0} to win");
+            sb.AppendLine($"Money £{shop.money:0}");
             sb.AppendLine($"Food {shop.foodUnits}");
-            sb.AppendLine($"Tank {shop.tank.UsedSpace}/{shop.tank.capacity} space");
-            sb.AppendLine();
-            if (shop.tank.AliveCount == 0) sb.AppendLine("Tank is empty.");
-            else
-            {
-                foreach (var f in shop.tank.fish)
-                {
-                    if (f?.species == null) continue;
-                    sb.AppendLine($"- {f.species.displayName}  hunger {(f.hunger * 100f):0}%");
-                }
-            }
+            sb.AppendLine($"Tanks {shop.tanks.Count}   Fish {shop.AliveCount}");
+            sb.AppendLine($"Orders {shop.OpenOrderCount}/{maxOpenOrders}");
+            if (shop.AnyStarving) sb.AppendLine("A tank is starving.");
             sb.AppendLine();
             sb.AppendLine("ORDERS");
             int shown = 0;
             foreach (var o in shop.orders)
             {
                 if (o == null || !o.IsOpen || o.wanted == null) continue;
-                sb.AppendLine($"- 1 {o.wanted.displayName}  £{o.payout:0}  {o.hoursRemaining:0}h");
+                sb.AppendLine($"- {o.qtyFilled}/{o.qty} {o.wanted.displayName}  £{o.payout:0}  {o.hoursRemaining:0}h");
                 shown++;
             }
             if (shown == 0) sb.AppendLine("- none yet");

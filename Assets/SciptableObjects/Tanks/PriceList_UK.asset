@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 629c9cbb9ec1df249bea07f6952ea4c8, type: 3}
+  m_Name: PriceList_UK
+  m_EditorClassIdentifier: Assembly-CSharp::AquariumShop.PriceList
+  foodUnitCost: 0.4
+  entries:
+  - species: {fileID: 11400000, guid: 9df54b82523bedb4abe9437ab46028ce, type: 2}
+    wholesale: 1.8
+    retail: 4.5
+    weight: 30
+  - species: {fileID: 11400000, guid: 99c1a1b9029e6af4b82bcdb58734b63a, type: 2}
+    wholesale: 1.2
+    retail: 3
+    weight: 28
+  - species: {fileID: 11400000, guid: 699fa5e3794e6e54dae48e6598b739d2, type: 2}
+    wholesale: 4.5
+    retail: 11
+    weight: 18
+  - species: {fileID: 11400000, guid: 8badb5f5434037f4abe506da3c55064a, type: 2}
+    wholesale: 7.5
+    retail: 16
+    weight: 12
+  - species: {fileID: 11400000, guid: 8835a5cedd1bcc446bc885cbd683bb34, type: 2}
+    wholesale: 22
+    retail: 38
+    weight: 6
