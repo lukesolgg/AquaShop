@@ -13,6 +13,8 @@ namespace AquariumShop
         public PriceList priceList;
         public TankPanel tankPanel;
         public CounterTablet counterTablet;
+        public PauseMenu pauseMenu;
+        public string titleSceneName = "Title";
 
         [Header("Catalogue")]
         public FishSpecies[] catalogue;
@@ -36,6 +38,8 @@ namespace AquariumShop
 
         int _hoursUntilNextOrder = 1;
         int _orderSerial;
+
+        float _speedBeforeMenu = 1f;
 
         void Awake()
         {
@@ -104,6 +108,7 @@ namespace AquariumShop
     hud?.HideMenu();
     tankPanel?.Close();
     counterTablet?.Close();
+    pauseMenu?.Close();
     SetMenuOpen(false);
     if (!GameOver) Save();
 }
@@ -260,6 +265,34 @@ namespace AquariumShop
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
 
+        public void TogglePauseMenu()
+{
+    if (GameOver) return;
+    if (MenuOpen)
+    {
+        CloseMenu();
+        return;
+    }
+    pauseMenu?.Open();
+    SetMenuOpen(true);
+}
+
+public void QuitToTitle()
+{
+    Save();
+    Time.timeScale = 1f;
+    SceneManager.LoadScene(titleSceneName);
+}
+
+public void QuitGame()
+{
+    Save();
+    Application.Quit();
+#if UNITY_EDITOR
+    UnityEditor.EditorApplication.isPlaying = false;
+#endif
+}
+
         public void Save()
         {
             var data = new SaveData
@@ -387,6 +420,7 @@ namespace AquariumShop
                 TimeKeeper.Instance != null ? TimeKeeper.Instance.TimeLabel : "Hour 0",
                 TimeKeeper.Instance != null ? TimeKeeper.Instance.SpeedLabel : "1x");
             hud?.RefreshOrders(shop);
+            hud?.RefreshHudMeta(shop.OpenOrderCount, maxOpenOrders, shop.AnyStarving);
         }
 
         string BuildStatusText()
@@ -411,13 +445,29 @@ namespace AquariumShop
         }
 
         void SetMenuOpen(bool open)
+{
+    MenuOpen = open;
+    if (playerController != null)
+        playerController.enabled = !open && !GameOver;
+    Cursor.lockState = open || GameOver ? CursorLockMode.None : CursorLockMode.Locked;
+    Cursor.visible = open || GameOver;
+
+    if (TimeKeeper.Instance != null)
+    {
+        if (open)
         {
-            MenuOpen = open;
-            if (playerController != null)
-                playerController.enabled = !open && !GameOver;
-            Cursor.lockState = open || GameOver ? CursorLockMode.None : CursorLockMode.Locked;
-            Cursor.visible = open || GameOver;
-            if (open) RefreshUI();
+            _speedBeforeMenu = TimeKeeper.Instance.Speed > 0.001f ? TimeKeeper.Instance.Speed : 1f;
+            TimeKeeper.Instance.Pause();
         }
+        else
+        {
+            if (_speedBeforeMenu >= 2.5f) TimeKeeper.Instance.Play3x();
+            else if (_speedBeforeMenu >= 1.5f) TimeKeeper.Instance.Play2x();
+            else TimeKeeper.Instance.Play1x();
+        }
+    }
+
+    if (open) RefreshUI();
+}
     }
 }

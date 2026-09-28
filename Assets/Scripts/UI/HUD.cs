@@ -12,6 +12,8 @@ namespace AquariumShop
         [SerializeField] TMP_Text promptText;
         [SerializeField] TMP_Text timeText;
         [SerializeField] TMP_Text speedText;
+        [SerializeField] TMP_Text orderCountText;
+        [SerializeField] TMP_Text warningText;
 
         [Header("Management Panel & Tabs")]
         [SerializeField] GameObject managementPanel;
@@ -128,16 +130,28 @@ namespace AquariumShop
         }
 
         void Update()
-        {
-            var gm = GameManager.Instance;
-            if (gm != null && gm.MenuOpen && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
-                gm.CloseMenu();
-        }
+{
+    var gm = GameManager.Instance;
+    if (gm == null || Keyboard.current == null) return;
+    if (!Keyboard.current.escapeKey.wasPressedThisFrame) return;
+    gm.TogglePauseMenu();
+}
 
         public void RefreshMoney(float amount)
         {
             if (moneyText != null) moneyText.text = $"£{amount:0}";
         }
+
+        public void RefreshHudMeta(int openOrders, int maxOrders, bool starving)
+{
+    if (orderCountText != null)
+        orderCountText.text = $"Orders {openOrders}/{maxOrders}";
+    if (warningText != null)
+    {
+        warningText.gameObject.SetActive(starving);
+        warningText.text = starving ? "Tank starving" : string.Empty;
+    }
+}
 
         public void RefreshStatus(string text)
         {

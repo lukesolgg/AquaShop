@@ -60,6 +60,9 @@ namespace AquariumShop
         }
 
         public string SpeedLabel => Speed <= 0.001f ? "Paused" : $"{Speed:0}x";
-        public string TimeLabel => $"Hour {GameHours:0}";
+        public int DayNumber => Mathf.FloorToInt(GameHours / 24f) + 1;
+public int HourOfDay => Mathf.FloorToInt(GameHours) % 24;
+
+public string TimeLabel => $"Day {DayNumber}  {HourOfDay:00}:00";
     }
 }
