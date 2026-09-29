@@ -9,8 +9,11 @@ namespace AquariumShop
         public int foodUnits = 40;
         public float foodUnitCost = 0.4f;
         public int level = 1;
+        public ShopPhase phase = ShopPhase.ClosedMorning;
         public List<TankInstance> tanks = new List<TankInstance>();
         public List<Order> orders = new List<Order>();
+        public List<string> ownedTankIds = new List<string>();
+        public List<string> boughtUpgrades = new List<string>();
 
         public int OpenOrderCount
         {
@@ -21,6 +24,26 @@ namespace AquariumShop
                     if (o != null && o.IsOpen) n++;
                 return n;
             }
+        }
+
+        public bool Owns(string tankId)
+        {
+            if (string.IsNullOrEmpty(tankId)) return false;
+            return ownedTankIds != null && ownedTankIds.Contains(tankId);
+        }
+
+        public void GrantTank(string tankId)
+        {
+            if (string.IsNullOrEmpty(tankId)) return;
+            if (ownedTankIds == null) ownedTankIds = new List<string>();
+            if (!ownedTankIds.Contains(tankId))
+                ownedTankIds.Add(tankId);
+        }
+
+        public bool HasUpgrade(string upgradeId)
+        {
+            if (string.IsNullOrEmpty(upgradeId)) return false;
+            return boughtUpgrades != null && boughtUpgrades.Contains(upgradeId);
         }
 
         public TankInstance GetTank(string id)
@@ -34,8 +57,13 @@ namespace AquariumShop
         public TankInstance PrimaryTank()
         {
             foreach (var t in tanks)
-                if (t != null && t.segment == TankSegment.Island) return t;
-            return tanks.Count > 0 ? tanks[0] : null;
+            {
+                if (t == null || !Owns(t.id)) continue;
+                if (t.segment == TankSegment.Island) return t;
+            }
+            foreach (var t in tanks)
+                if (t != null && Owns(t.id)) return t;
+            return null;
         }
 
         public int AliveCount
@@ -53,7 +81,7 @@ namespace AquariumShop
         {
             int n = 0;
             foreach (var t in tanks)
-                if (t != null) n += t.CountAlive(species);
+                if (t != null && Owns(t.id)) n += t.CountAlive(species);
             return n;
         }
 
@@ -63,7 +91,7 @@ namespace AquariumShop
             {
                 foreach (var t in tanks)
                 {
-                    if (t == null || t.IsEmpty) continue;
+                    if (t == null || !Owns(t.id) || t.IsEmpty) continue;
                     if (t.AverageHunger >= 0.7f) return true;
                 }
                 return false;
@@ -91,6 +119,10 @@ namespace AquariumShop
                 tank.segment = anchor.segment;
                 if (anchor.profile != null) tank.capacity = anchor.profile.capacity;
             }
+
+            if (anchor.ownedFromStart)
+                GrantTank(anchor.id);
+
             return tank;
         }
 
@@ -98,6 +130,7 @@ namespace AquariumShop
         {
             error = null;
             if (species == null) { error = "No species."; return false; }
+            if (!Owns(tankId)) { error = "You do not own that tank."; return false; }
             var tank = GetTank(tankId);
             if (tank == null) { error = "Pick a tank."; return false; }
             float cost = prices != null ? prices.Wholesale(species) : species.wholesalePrice;
@@ -130,6 +163,7 @@ namespace AquariumShop
         public bool TryFeedTank(string tankId, out string error)
         {
             error = null;
+            if (!Owns(tankId)) { error = "You do not own that tank."; return false; }
             var tank = GetTank(tankId);
             if (tank == null) { error = "No tank."; return false; }
             int alive = tank.AliveCount;
@@ -174,7 +208,7 @@ namespace AquariumShop
             foreach (var tank in tanks)
             {
                 if (left <= 0) break;
-                if (tank == null) continue;
+                if (tank == null || !Owns(tank.id)) continue;
                 left -= tank.RemoveUpTo(order.wanted, left);
             }
 
@@ -198,15 +232,23 @@ namespace AquariumShop
             return null;
         }
 
-        public void TickHour()
+        public void TickHour(float hours = 1f)
         {
             foreach (var t in tanks)
-                t?.TickHour();
+            {
+                if (t == null) continue;
+                foreach (var f in t.fish)
+                {
+                    if (f == null || !f.IsAlive || f.species == null) continue;
+                    f.hunger += f.species.hungerPerHour * hours;
+                }
+                t.fish.RemoveAll(f => f == null || !f.IsAlive);
+            }
 
             foreach (var o in orders)
             {
                 if (o == null || !o.IsOpen) continue;
-                o.hoursRemaining -= 1f;
+                o.hoursRemaining -= hours;
                 if (o.hoursRemaining <= 0f)
                 {
                     o.status = OrderStatus.Failed;

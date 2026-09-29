@@ -14,7 +14,12 @@ namespace AquariumShop
         public TankPanel tankPanel;
         public CounterTablet counterTablet;
         public PauseMenu pauseMenu;
+        public StoreMenu storeMenu;
         public string titleSceneName = "Title";
+
+        [Header("Day")]
+        public int openHour = 8;
+        public int closeHour = 20;
 
         [Header("Catalogue")]
         public FishSpecies[] catalogue;
@@ -36,10 +41,19 @@ namespace AquariumShop
         public bool Lost { get; private set; }
         public bool GameOver => Won || Lost;
 
-        int _hoursUntilNextOrder = 1;
+        float _hoursUntilNextOrder = 1f;
         int _orderSerial;
-
         float _speedBeforeMenu = 1f;
+
+        public bool IsOpenHours
+        {
+            get
+            {
+                if (TimeKeeper.Instance == null) return false;
+                int h = TimeKeeper.Instance.HourOfDay;
+                return h >= openHour && h < closeHour;
+            }
+        }
 
         void Awake()
         {
@@ -61,9 +75,23 @@ namespace AquariumShop
             Lost = false;
 
             RegisterAnchors();
-            if (!TryLoad())
-                _hoursUntilNextOrder = 1;
+            bool loaded = TryLoad();
             RegisterAnchors();
+
+            if (!loaded)
+            {
+                _hoursUntilNextOrder = 1f;
+                shop.phase = ShopPhase.ClosedMorning;
+                if (TimeKeeper.Instance != null)
+                {
+                    TimeKeeper.Instance.SetHours(openHour);
+                    TimeKeeper.Instance.SetFrozen(true);
+                }
+            }
+            else
+            {
+                TimeKeeper.Instance?.SetFrozen(shop.phase == ShopPhase.ClosedMorning);
+            }
 
             RefreshUI();
             SetMenuOpen(false);
@@ -81,37 +109,92 @@ namespace AquariumShop
         }
 
         public void OpenInteract(Interactable.Kind kind)
-{
-    if (GameOver) return;
-    if (kind == Interactable.Kind.Counter && counterTablet != null)
-        counterTablet.Open();
-    else if (kind == Interactable.Kind.Tank && tankPanel != null)
-        tankPanel.Open();
-    else
-        hud?.ShowMenu(kind == Interactable.Kind.Tank ? "Tank" : "Wholesaler");
-    SetMenuOpen(true);
-}
+        {
+            if (GameOver) return;
+            if (kind == Interactable.Kind.Counter && counterTablet != null)
+                counterTablet.Open();
+            else if (kind == Interactable.Kind.Tank && tankPanel != null)
+                tankPanel.Open();
+            else
+                hud?.ShowMenu(kind == Interactable.Kind.Tank ? "Tank" : "Wholesaler");
+            SetMenuOpen(true);
+        }
 
         public void ToggleManagementMenu()
-{
-    if (GameOver) return;
-    if (MenuOpen) { CloseMenu(); return; }
-    if (tankPanel != null)
-        tankPanel.Open();
-    else
-        hud?.ShowMenu("Management");
-    SetMenuOpen(true);
-}
+        {
+            ToggleStoreMenu();
+        }
+
+        public void ToggleStoreMenu()
+        {
+            if (GameOver) return;
+            if (MenuOpen)
+            {
+                CloseMenu();
+                return;
+            }
+            storeMenu?.Open();
+            SetMenuOpen(true);
+        }
+
+        public void TogglePauseMenu()
+        {
+            if (GameOver) return;
+            if (MenuOpen)
+            {
+                CloseMenu();
+                return;
+            }
+            pauseMenu?.Open();
+            SetMenuOpen(true);
+        }
 
         public void CloseMenu()
-{
-    hud?.HideMenu();
-    tankPanel?.Close();
-    counterTablet?.Close();
-    pauseMenu?.Close();
-    SetMenuOpen(false);
-    if (!GameOver) Save();
-}
+        {
+            hud?.HideMenu();
+            tankPanel?.Close();
+            counterTablet?.Close();
+            pauseMenu?.Close();
+            storeMenu?.Close();
+            SetMenuOpen(false);
+            if (!GameOver) Save();
+        }
+
+        public void OpenShop()
+        {
+            if (shop.phase != ShopPhase.ClosedMorning) return;
+            shop.phase = ShopPhase.Open;
+            TimeKeeper.Instance?.SetFrozen(false);
+            CloseMenu();
+            AfterChange();
+        }
+
+        public void CloseShop()
+        {
+            if (shop.phase != ShopPhase.Open) return;
+            shop.phase = ShopPhase.ClosedNight;
+            CloseMenu();
+            AfterChange();
+        }
+
+        public void SkipToMorning()
+        {
+            if (shop.phase == ShopPhase.Open) return;
+            var tk = TimeKeeper.Instance;
+            if (tk == null) return;
+
+            int day = tk.DayNumber;
+            int hour = tk.HourOfDay;
+            if (hour >= openHour)
+                day += 1;
+
+            float target = (day - 1) * 24f + openHour;
+            tk.SetHours(target);
+            shop.phase = ShopPhase.ClosedMorning;
+            tk.SetFrozen(true);
+            CloseMenu();
+            AfterChange();
+        }
 
         public void BuyFish(FishSpecies species)
         {
@@ -201,11 +284,24 @@ namespace AquariumShop
             AfterChange();
         }
 
-        public void OnGameHourPassed()
+        public void OnGameHourPassed(float hours = 1f)
         {
             if (GameOver) return;
-            shop.TickHour();
-            TickOrderSpawn();
+            shop.TickHour(hours);
+
+            var tk = TimeKeeper.Instance;
+            if (tk != null && shop.phase == ShopPhase.Open && tk.HourOfDay >= closeHour)
+                shop.phase = ShopPhase.ClosedNight;
+
+            if (tk != null && shop.phase == ShopPhase.ClosedNight && tk.HourOfDay == openHour && tk.MinuteOfDay == 0)
+            {
+                shop.phase = ShopPhase.ClosedMorning;
+                tk.SetFrozen(true);
+            }
+
+            if (shop.phase == ShopPhase.Open)
+                TickOrderSpawn(hours);
+
             AfterChange();
         }
 
@@ -215,6 +311,7 @@ namespace AquariumShop
             if (!GameOver) Save();
             tankPanel?.Rebuild();
             counterTablet?.Rebuild();
+            storeMenu?.Refresh();
         }
 
         TankInstance FirstAccepting(FishSpecies species)
@@ -224,10 +321,10 @@ namespace AquariumShop
             return null;
         }
 
-        void TickOrderSpawn()
+        void TickOrderSpawn(float hours)
         {
-            _hoursUntilNextOrder--;
-            if (_hoursUntilNextOrder > 0) return;
+            _hoursUntilNextOrder -= hours;
+            if (_hoursUntilNextOrder > 0f) return;
             TrySpawnOrder();
             _hoursUntilNextOrder = Random.Range(minHoursBetweenOrders, maxHoursBetweenOrders + 1);
         }
@@ -265,33 +362,21 @@ namespace AquariumShop
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
 
-        public void TogglePauseMenu()
-{
-    if (GameOver) return;
-    if (MenuOpen)
-    {
-        CloseMenu();
-        return;
-    }
-    pauseMenu?.Open();
-    SetMenuOpen(true);
-}
+        public void QuitToTitle()
+        {
+            Save();
+            Time.timeScale = 1f;
+            SceneManager.LoadScene(titleSceneName);
+        }
 
-public void QuitToTitle()
-{
-    Save();
-    Time.timeScale = 1f;
-    SceneManager.LoadScene(titleSceneName);
-}
-
-public void QuitGame()
-{
-    Save();
-    Application.Quit();
+        public void QuitGame()
+        {
+            Save();
+            Application.Quit();
 #if UNITY_EDITOR
-    UnityEditor.EditorApplication.isPlaying = false;
+            UnityEditor.EditorApplication.isPlaying = false;
 #endif
-}
+        }
 
         public void Save()
         {
@@ -300,9 +385,10 @@ public void QuitGame()
                 money = shop.money,
                 foodUnits = shop.foodUnits,
                 gameHours = TimeKeeper.Instance != null ? TimeKeeper.Instance.GameHours : 0f,
-                hoursUntilNextOrder = _hoursUntilNextOrder,
+                hoursUntilNextOrder = Mathf.CeilToInt(_hoursUntilNextOrder),
                 orderSerial = _orderSerial,
-                level = shop.level
+                level = shop.level,
+                phase = (int)shop.phase
             };
 
             foreach (var tank in shop.tanks)
@@ -349,8 +435,9 @@ public void QuitGame()
             shop.money = data.money;
             shop.foodUnits = data.foodUnits;
             shop.level = data.level <= 0 ? 1 : data.level;
+            shop.phase = (ShopPhase)data.phase;
             shop.orders.Clear();
-            _hoursUntilNextOrder = Mathf.Max(1, data.hoursUntilNextOrder);
+            _hoursUntilNextOrder = Mathf.Max(0.25f, data.hoursUntilNextOrder);
             _orderSerial = data.orderSerial;
 
             if (TimeKeeper.Instance != null)
@@ -417,10 +504,11 @@ public void QuitGame()
             hud?.RefreshMoney(shop.money);
             hud?.RefreshStatus(BuildStatusText());
             hud?.RefreshTime(
-                TimeKeeper.Instance != null ? TimeKeeper.Instance.TimeLabel : "Hour 0",
+                TimeKeeper.Instance != null ? TimeKeeper.Instance.TimeLabel : "Day 1  08:00",
                 TimeKeeper.Instance != null ? TimeKeeper.Instance.SpeedLabel : "1x");
             hud?.RefreshOrders(shop);
             hud?.RefreshHudMeta(shop.OpenOrderCount, maxOpenOrders, shop.AnyStarving);
+            storeMenu?.Refresh();
         }
 
         string BuildStatusText()
@@ -437,7 +525,7 @@ public void QuitGame()
             foreach (var o in shop.orders)
             {
                 if (o == null || !o.IsOpen || o.wanted == null) continue;
-                sb.AppendLine($"- {o.qtyFilled}/{o.qty} {o.wanted.displayName}  £{o.payout:0}  {o.hoursRemaining:0}h");
+                sb.AppendLine($"- {o.qtyFilled}/{o.qty} {o.wanted.displayName}  £{o.payout:0}  {o.hoursRemaining:0.#}h");
                 shown++;
             }
             if (shown == 0) sb.AppendLine("- none yet");
@@ -445,29 +533,29 @@ public void QuitGame()
         }
 
         void SetMenuOpen(bool open)
-{
-    MenuOpen = open;
-    if (playerController != null)
-        playerController.enabled = !open && !GameOver;
-    Cursor.lockState = open || GameOver ? CursorLockMode.None : CursorLockMode.Locked;
-    Cursor.visible = open || GameOver;
-
-    if (TimeKeeper.Instance != null)
-    {
-        if (open)
         {
-            _speedBeforeMenu = TimeKeeper.Instance.Speed > 0.001f ? TimeKeeper.Instance.Speed : 1f;
-            TimeKeeper.Instance.Pause();
-        }
-        else
-        {
-            if (_speedBeforeMenu >= 2.5f) TimeKeeper.Instance.Play3x();
-            else if (_speedBeforeMenu >= 1.5f) TimeKeeper.Instance.Play2x();
-            else TimeKeeper.Instance.Play1x();
-        }
-    }
+            MenuOpen = open;
+            if (playerController != null)
+                playerController.enabled = !open && !GameOver;
+            Cursor.lockState = open || GameOver ? CursorLockMode.None : CursorLockMode.Locked;
+            Cursor.visible = open || GameOver;
 
-    if (open) RefreshUI();
-}
+            if (TimeKeeper.Instance != null)
+            {
+                if (open)
+                {
+                    _speedBeforeMenu = TimeKeeper.Instance.Speed > 0.001f ? TimeKeeper.Instance.Speed : 1f;
+                    TimeKeeper.Instance.Pause();
+                }
+                else
+                {
+                    if (_speedBeforeMenu >= 2.5f) TimeKeeper.Instance.Play3x();
+                    else if (_speedBeforeMenu >= 1.5f) TimeKeeper.Instance.Play2x();
+                    else TimeKeeper.Instance.Play1x();
+                }
+            }
+
+            if (open) RefreshUI();
+        }
     }
 }

@@ -129,12 +129,27 @@ namespace AquariumShop
             }
         }
 
-        void Update()
+       void Update()
 {
     var gm = GameManager.Instance;
     if (gm == null || Keyboard.current == null) return;
-    if (!Keyboard.current.escapeKey.wasPressedThisFrame) return;
-    gm.TogglePauseMenu();
+
+    if (Keyboard.current.escapeKey.wasPressedThisFrame)
+    {
+        gm.TogglePauseMenu();
+        return;
+    }
+
+    if (gm.MenuOpen) return;
+
+    if (Keyboard.current.digit1Key.wasPressedThisFrame || Keyboard.current.numpad1Key.wasPressedThisFrame)
+        TimeKeeper.Instance?.Pause();
+    if (Keyboard.current.digit2Key.wasPressedThisFrame || Keyboard.current.numpad2Key.wasPressedThisFrame)
+        TimeKeeper.Instance?.Play1x();
+    if (Keyboard.current.digit3Key.wasPressedThisFrame || Keyboard.current.numpad3Key.wasPressedThisFrame)
+        TimeKeeper.Instance?.Play2x();
+    if (Keyboard.current.digit4Key.wasPressedThisFrame || Keyboard.current.numpad4Key.wasPressedThisFrame)
+        TimeKeeper.Instance?.Play3x();
 }
 
         public void RefreshMoney(float amount)

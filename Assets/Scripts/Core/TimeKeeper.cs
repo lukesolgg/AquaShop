@@ -6,13 +6,21 @@ namespace AquariumShop
     {
         public static TimeKeeper Instance { get; private set; }
 
-        [Tooltip("At 1x, 1 real second = this many game hours.")]
-        public float gameHoursPerRealSecond = 0.1f;
+        [Tooltip("Real seconds for one 15-minute game step at 1x. TCG-style = 15.")]
+        public float secondsPerQuarter = 15f;
 
         public float GameHours { get; private set; }
         public float Speed { get; private set; } = 1f;
+        public bool ClockFrozen { get; private set; }
 
-        float _hourAcc;
+        public int DayNumber => Mathf.FloorToInt(GameHours / 24f) + 1;
+        public int HourOfDay => Mathf.FloorToInt(GameHours) % 24;
+        public int MinuteOfDay => Mathf.FloorToInt((GameHours % 1f) * 60f);
+
+        public string SpeedLabel => Speed <= 0.001f ? "Paused" : $"{Speed:0}x";
+        public string TimeLabel => $"Day {DayNumber}  {HourOfDay:00}:{MinuteOfDay:00}";
+
+        float _acc;
 
         void Awake()
         {
@@ -27,23 +35,27 @@ namespace AquariumShop
 
         void Update()
         {
-            if (GameManager.Instance != null && GameManager.Instance.GameOver)
-                return;
+            if (GameManager.Instance != null && GameManager.Instance.GameOver) return;
+            if (ClockFrozen) return;
+            if (GameManager.Instance != null && GameManager.Instance.MenuOpen) return;
+            if (Speed <= 0.001f) return;
 
-            _hourAcc += Time.deltaTime * gameHoursPerRealSecond;
-            while (_hourAcc >= 1f)
+            _acc += Time.unscaledDeltaTime * Speed;
+            while (_acc >= secondsPerQuarter)
             {
-                _hourAcc -= 1f;
-                GameHours += 1f;
-                GameManager.Instance?.OnGameHourPassed();
+                _acc -= secondsPerQuarter;
+                GameHours += 0.25f;
+                GameManager.Instance?.OnGameHourPassed(0.25f);
             }
         }
 
         public void SetHours(float hours)
         {
             GameHours = hours;
-            _hourAcc = 0f;
+            _acc = 0f;
         }
+
+        public void SetFrozen(bool frozen) => ClockFrozen = frozen;
 
         public void Pause() => ApplySpeed(0f);
         public void Play1x() => ApplySpeed(1f);
@@ -55,14 +67,8 @@ namespace AquariumShop
             if (GameManager.Instance != null && GameManager.Instance.GameOver)
                 speed = 0f;
             Speed = speed;
-            Time.timeScale = speed;
+            Time.timeScale = speed <= 0.001f ? 0f : 1f;
             GameManager.Instance?.RefreshUI();
         }
-
-        public string SpeedLabel => Speed <= 0.001f ? "Paused" : $"{Speed:0}x";
-        public int DayNumber => Mathf.FloorToInt(GameHours / 24f) + 1;
-public int HourOfDay => Mathf.FloorToInt(GameHours) % 24;
-
-public string TimeLabel => $"Day {DayNumber}  {HourOfDay:00}:00";
     }
 }

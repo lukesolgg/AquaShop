@@ -46,6 +46,7 @@ namespace AquariumShop
         public int level = 1;
         public List<TankSave> tanks = new List<TankSave>();
         public List<OrderSave> orders = new List<OrderSave>();
+        public int phase;
     }
 
     public static class SaveSystem

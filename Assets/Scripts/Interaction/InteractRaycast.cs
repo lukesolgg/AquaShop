@@ -30,7 +30,7 @@ namespace AquariumShop
                 gm.OpenInteract(_current.kind);
 
             if (WasPressed(Key.Tab))
-                gm.ToggleManagementMenu();
+                gm.ToggleStoreMenu();
         }
 
         static bool WasPressed(Key key)
