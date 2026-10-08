@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -23,6 +24,9 @@ namespace AquariumShop
 
         [Header("Catalogue")]
         public FishSpecies[] catalogue;
+
+        [Header("Upgrades")]
+        public ShopUpgrade[] upgrades;
 
         [Header("Orders")]
         public int maxOpenOrders = 5;
@@ -232,12 +236,62 @@ namespace AquariumShop
 
         public void BuyOneFood() => BuyFood(1);
 
+        public void BuyUpgrade(string upgradeId)
+        {
+            if (GameOver) return;
+            if (string.IsNullOrEmpty(upgradeId)) return;
+
+            ShopUpgrade up = null;
+            if (upgrades != null)
+            {
+                foreach (var u in upgrades)
+                    if (u != null && u.id == upgradeId) { up = u; break; }
+            }
+            if (up == null)
+            {
+                Debug.Log("Unknown upgrade.");
+                return;
+            }
+            if (shop.HasUpgrade(up.id))
+            {
+                Debug.Log("Already owned.");
+                return;
+            }
+            if (!string.IsNullOrEmpty(up.requiresUpgradeId) && !shop.HasUpgrade(up.requiresUpgradeId))
+            {
+                Debug.Log("Need a previous upgrade first.");
+                return;
+            }
+            if (shop.money < up.cost)
+            {
+                Debug.Log("Not enough money.");
+                return;
+            }
+
+            shop.money -= up.cost;
+            if (shop.boughtUpgrades == null)
+                shop.boughtUpgrades = new List<string>();
+            shop.boughtUpgrades.Add(up.id);
+
+            if (up.unlockTankIds != null)
+            {
+                foreach (var tankId in up.unlockTankIds)
+                    shop.GrantTank(tankId);
+            }
+            if (up.setsLevel > 0)
+                shop.level = up.setsLevel;
+
+            Debug.Log($"Bought upgrade: {up.displayName}");
+            AfterChange();
+        }
+
         public void FeedAll()
         {
             if (GameOver) return;
             foreach (var tank in shop.tanks)
             {
                 if (tank == null || tank.IsEmpty) continue;
+                if (!shop.Owns(tank.id)) continue;
                 if (!shop.TryFeedTank(tank.id, out var error))
                 {
                     Debug.Log(error);
@@ -317,7 +371,7 @@ namespace AquariumShop
         TankInstance FirstAccepting(FishSpecies species)
         {
             foreach (var t in shop.tanks)
-                if (t != null && t.Accepts(species)) return t;
+                if (t != null && shop.Owns(t.id) && t.Accepts(species)) return t;
             return null;
         }
 
@@ -388,7 +442,13 @@ namespace AquariumShop
                 hoursUntilNextOrder = Mathf.CeilToInt(_hoursUntilNextOrder),
                 orderSerial = _orderSerial,
                 level = shop.level,
-                phase = (int)shop.phase
+                phase = (int)shop.phase,
+                ownedTankIds = shop.ownedTankIds != null
+                    ? new List<string>(shop.ownedTankIds)
+                    : new List<string>(),
+                boughtUpgrades = shop.boughtUpgrades != null
+                    ? new List<string>(shop.boughtUpgrades)
+                    : new List<string>()
             };
 
             foreach (var tank in shop.tanks)
@@ -436,6 +496,12 @@ namespace AquariumShop
             shop.foodUnits = data.foodUnits;
             shop.level = data.level <= 0 ? 1 : data.level;
             shop.phase = (ShopPhase)data.phase;
+            shop.ownedTankIds = data.ownedTankIds != null
+                ? new List<string>(data.ownedTankIds)
+                : new List<string>();
+            shop.boughtUpgrades = data.boughtUpgrades != null
+                ? new List<string>(data.boughtUpgrades)
+                : new List<string>();
             shop.orders.Clear();
             _hoursUntilNextOrder = Mathf.Max(0.25f, data.hoursUntilNextOrder);
             _orderSerial = data.orderSerial;

@@ -225,7 +225,10 @@ namespace AquariumShop
             int options = 0;
             foreach (var tank in gm.shop.tanks)
             {
-                if (tank == null || !tank.Accepts(_pendingSpecies)) continue;
+                if (tank == null) continue;
+                if (!gm.shop.Owns(tank.id)) continue;
+                if (!tank.Accepts(_pendingSpecies)) continue;
+
                 options++;
                 var row = Instantiate(tankPickTemplate, tankPickList);
                 row.gameObject.SetActive(true);
@@ -248,10 +251,12 @@ namespace AquariumShop
             if (stockHintText != null)
             {
                 stockHintText.text = options == 0
-                    ? $"No tank can take {_pendingSpecies.displayName} (full or wrong species)."
+                    ? $"No owned tank can take {_pendingSpecies.displayName}."
                     : $"Buying {_pendingSpecies.displayName}. Pick a tank.";
             }
-            SetStatus(options == 0 ? "No valid tank." : $"Select tank for {_pendingSpecies.displayName}.");
+            SetStatus(options == 0
+                ? "No valid owned tank."
+                : $"Select tank for {_pendingSpecies.displayName}.");
         }
 
         void BuildFood()

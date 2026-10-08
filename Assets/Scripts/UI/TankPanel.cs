@@ -101,6 +101,7 @@ namespace AquariumShop
             foreach (var tank in shop.tanks)
             {
                 if (tank == null) continue;
+                if (!shop.Owns(tank.id)) continue;
                 if (_filter.HasValue && tank.segment != _filter.Value) continue;
 
                 var row = Instantiate(rowTemplate, listParent);
