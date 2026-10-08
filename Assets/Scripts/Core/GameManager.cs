@@ -22,6 +22,9 @@ namespace AquariumShop
         public int openHour = 8;
         public int closeHour = 20;
 
+        [Tooltip("Taken when a new morning starts (skip or clock hits open hour).")]
+        public float dailyRent = 40f;
+
         [Header("Catalogue")]
         public FishSpecies[] catalogue;
 
@@ -196,6 +199,7 @@ namespace AquariumShop
             tk.SetHours(target);
             shop.phase = ShopPhase.ClosedMorning;
             tk.SetFrozen(true);
+            ChargeDailyRent();
             CloseMenu();
             AfterChange();
         }
@@ -351,6 +355,7 @@ namespace AquariumShop
             {
                 shop.phase = ShopPhase.ClosedMorning;
                 tk.SetFrozen(true);
+                ChargeDailyRent();
             }
 
             if (shop.phase == ShopPhase.Open)
@@ -575,6 +580,15 @@ namespace AquariumShop
             hud?.RefreshOrders(shop);
             hud?.RefreshHudMeta(shop.OpenOrderCount, maxOpenOrders, shop.AnyStarving);
             storeMenu?.Refresh();
+        }
+
+        void ChargeDailyRent()
+        {
+            if (dailyRent <= 0f) return;
+            shop.money -= dailyRent;
+            if (shop.money < 0f) shop.money = 0f;
+            hud?.ShowToast($"Daily rent −£{dailyRent:0}");
+            Debug.Log($"Daily rent −£{dailyRent:0}");
         }
 
         string BuildStatusText()

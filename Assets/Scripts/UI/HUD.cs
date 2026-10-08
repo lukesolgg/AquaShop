@@ -41,6 +41,26 @@ namespace AquariumShop
         [SerializeField] TMP_Text endText;
         [SerializeField] Button restartButton;
 
+        [SerializeField] TMP_Text toastText;
+        [SerializeField] float toastSeconds = 3f;
+
+        float _toastUntil;
+
+        public void ShowToast(string message)
+        {
+            if (toastText == null) return;
+            toastText.text = message;
+            toastText.gameObject.SetActive(true);
+            _toastUntil = Time.unscaledTime + toastSeconds;
+        }
+
+        void UpdateToast()
+        {
+            if (toastText == null || !toastText.gameObject.activeSelf) return;
+            if (Time.unscaledTime >= _toastUntil)
+                toastText.gameObject.SetActive(false);
+        }
+
         void Awake()
         {
             // Tab button wiring
@@ -48,6 +68,9 @@ namespace AquariumShop
                 tankTabButton.onClick.AddListener(() => SwitchTab(true));
             if (businessTabButton != null)
                 businessTabButton.onClick.AddListener(() => SwitchTab(false));
+
+            if (toastText != null)
+            toastText.gameObject.SetActive(false);
 
             // Core UI wiring
             if (closeButton != null)
@@ -150,6 +173,7 @@ namespace AquariumShop
         TimeKeeper.Instance?.Play2x();
     if (Keyboard.current.digit4Key.wasPressedThisFrame || Keyboard.current.numpad4Key.wasPressedThisFrame)
         TimeKeeper.Instance?.Play3x();
+    UpdateToast();
 }
 
         public void RefreshMoney(float amount)
