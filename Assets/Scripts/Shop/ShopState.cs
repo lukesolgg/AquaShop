@@ -234,16 +234,8 @@ namespace AquariumShop
 
         public void TickHour(float hours = 1f)
         {
-            foreach (var t in tanks)
-            {
-                if (t == null) continue;
-                foreach (var f in t.fish)
-                {
-                    if (f == null || !f.IsAlive || f.species == null) continue;
-                    f.hunger += f.species.hungerPerHour * hours;
-                }
-                t.fish.RemoveAll(f => f == null || !f.IsAlive);
-            }
+            // Hunger / fish death disabled for buy-sell focused build.
+            // Re-enable later by restoring hunger += and RemoveAll.
 
             foreach (var o in orders)
             {
@@ -256,6 +248,6 @@ namespace AquariumShop
                     if (money < 0f) money = 0f;
                 }
             }
-        }
+        }   
     }
 }

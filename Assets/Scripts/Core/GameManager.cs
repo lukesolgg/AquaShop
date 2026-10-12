@@ -578,7 +578,7 @@ namespace AquariumShop
                 TimeKeeper.Instance != null ? TimeKeeper.Instance.TimeLabel : "Day 1  08:00",
                 TimeKeeper.Instance != null ? TimeKeeper.Instance.SpeedLabel : "1x");
             hud?.RefreshOrders(shop);
-            hud?.RefreshHudMeta(shop.OpenOrderCount, maxOpenOrders, shop.AnyStarving);
+            hud?.RefreshHudMeta(shop.OpenOrderCount, maxOpenOrders, false);
             storeMenu?.Refresh();
         }
 

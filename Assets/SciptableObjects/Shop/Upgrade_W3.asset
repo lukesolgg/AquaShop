@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 147f89ff8d1603645adbe39a954bcd85, type: 3}
+  m_Name: Upgrade_W3
+  m_EditorClassIdentifier: Assembly-CSharp::AquariumShop.ShopUpgrade
+  id: W3_wall
+  displayName: Side wall (W3)
+  cost: 1200
+  requiresUpgradeId: W2_wall
+  unlockTankIds:
+  - W3_1_1
+  - W3_1_2
+  - W3_1_3
+  - W3_2_1
+  - W3_2_2
+  - W3_2_3
+  - W3_3_1
+  - W3_3_2
+  - W3_3_3
+  - W3_4_1
+  - W3_4_2
+  - W3_4_3
+  - W3_5_1
+  - W3_5_2
+  - W3_5_3
+  setsLevel: 0
